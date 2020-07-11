@@ -1,0 +1,902 @@
+package jv.freeorm.connection;
+
+import jv.freeorm.base.DriverType;
+import jv.freeorm.base.DbParameter;
+import java.sql.CallableStatement;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.Driver;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
+/**
+ * @author Mustafa SACLI
+ *
+ * @since 1.7
+ *
+ */
+public final class DbConnection implements IDbConnection {
+
+    private boolean _autoCommit;
+    private String driver_ = "";
+    private DriverType driver_type;
+    private String connection_url = "";
+    private Properties _props = null;
+    private String user_ = "";
+    private String pass_ = "";
+    private int ctor_type = 0;
+    private Connection db_conn = null;
+    private Exception last_closing_error;
+
+    public DbConnection(DriverType ConnType, String ConnectionUrl) throws Exception {
+
+        if (ConnType == DriverType.Unknown || ConnType == DriverType.Unknown) {
+            throw new Exception("Driver Type can not be External Or Unknown");
+        }
+
+        driver_type = ConnType;
+        connection_url = ConnectionUrl;
+        driver_ = driver_type.getDriver();
+        ctor_type = 1;
+    }
+
+    public DbConnection(DriverType ConnType, String ConnectionUrl, String user, String password) throws Exception {
+
+        if (ConnType == DriverType.Unknown || ConnType == DriverType.Unknown) {
+            throw new Exception("Driver Type can not be External Or Unknown");
+        }
+
+        driver_type = ConnType;
+        connection_url = ConnectionUrl;
+        user_ = user;
+        pass_ = password;
+        driver_ = driver_type.getDriver();
+        ctor_type = 2;
+    }
+
+    public DbConnection(DriverType ConnType, String ConnectionUrl, Properties props) throws Exception {
+
+        if (ConnType == DriverType.Unknown || ConnType == DriverType.Unknown) {
+            throw new Exception("Driver Type can not be External Or Unknown");
+        }
+
+        driver_type = ConnType;
+        connection_url = ConnectionUrl;
+        driver_ = driver_type.getDriver();
+        _props = props;
+        ctor_type = 3;
+    }
+
+    @Override
+    public DriverType getConnectionType() {
+        return driver_type;
+    }
+
+    /**
+     *
+     * @param ConnType
+     * @throws SQLException
+     */
+    @Override
+    public void setConnectionType(DriverType ConnType) throws Exception {
+        try {
+            driver_type = ConnType;
+
+            if (driver_type == DriverType.Unknown
+                    || driver_type == DriverType.Unknown) {
+                throw new Exception(
+                        "Driver Type can not be External Or Unknown");
+            }
+            driver_ = driver_type.getDriver();
+        } catch (Exception ex) {
+            throw ex;
+        }
+    }
+
+    private void initConnection() throws Exception {
+        try {
+            if (db_conn == null) {
+                Driver drv = (Driver) Class.forName(driver_).newInstance();
+                DriverManager.registerDriver(drv);
+
+                if (ctor_type == 1) {  // URL.
+                    db_conn = DriverManager.getConnection(connection_url);
+                    return;
+                }
+
+                if (ctor_type == 2) {  // URL, user and pass.
+                    db_conn = DriverManager.getConnection(connection_url,
+                            user_, pass_);
+                    return;
+                }
+
+                if (ctor_type == 3) {// URL and Properties.
+                    db_conn = DriverManager.getConnection(connection_url, _props);
+                    return;
+                }
+            }
+
+            if (!db_conn.isClosed()) {
+                Driver drv = (Driver) Class.forName(driver_).newInstance();
+                DriverManager.registerDriver(drv);
+
+                if (ctor_type == 1) {  // URL.
+                    db_conn = DriverManager.getConnection(connection_url);
+                    return;
+                }
+
+                if (ctor_type == 2) {  // URL, user and pass.
+                    db_conn = DriverManager.getConnection(connection_url,
+                            user_, pass_);
+                    return;
+                }
+
+                if (ctor_type == 3) {// URL and Properties.
+                    db_conn = DriverManager.getConnection(connection_url, _props);
+                }
+            }
+        } catch (Exception e) {
+            throw e;
+        }
+    }
+
+    public static IDbConnection createDbConn(DriverType driver_type,
+            String connection_url) throws Exception {
+        IDbConnection conn = null;
+        try {
+            conn = new DbConnection(driver_type, connection_url);
+        } catch (Exception e) {
+            throw e;
+        }
+        return conn;
+    }
+
+    public static IDbConnection createDbConn(DriverType driver_type,
+            String connection_url, String user, String password) throws Exception {
+        IDbConnection conn = null;
+        try {
+            conn = new DbConnection(driver_type, connection_url, user, password);
+        } catch (Exception e) {
+            throw e;
+        }
+        return conn;
+    }
+
+    public static IDbConnection createDbConn(DriverType driver_type,
+            String connection_url, Properties props) throws Exception {
+        IDbConnection conn = null;
+        try {
+            conn = new DbConnection(driver_type, connection_url, props);
+        } catch (Exception e) {
+            throw e;
+        }
+        return conn;
+    }
+
+    /**
+     * Aşağıdaki metotlar IDbConnection arayüzüne eklenen yeni metotlar içindir.
+     *
+     * @throws java.lang.Exception
+     */
+    @Override
+    public boolean executeQuery(String query, DbParameter... parameters) throws Exception {
+        boolean result;
+
+        try {
+            //db_conn = createConnection();
+            //beginTransaction();
+
+            try (PreparedStatement prepared = db_conn.prepareStatement(query)) {
+                if (parameters != null) {
+                    int param_dir_id;
+                    for (DbParameter param : parameters) {
+                        param_dir_id = param.getParameterDirection();
+                        if (param_dir_id == DbParameter.PARAMETER_DIRECTION_IN) {
+                            prepared.setObject(param.getIndex(), param.getValue());
+                        }
+                    }
+                }
+                result = prepared.execute();
+            }
+
+            //commitTransaction();
+            //close();
+        } catch (Exception e) {
+            //rollbackTransaction();
+            //close();
+            throw e;
+        }
+
+        return result;
+    }
+
+    @Override
+    public boolean executeQuery(String query) throws Exception {
+        boolean result;
+
+        try {
+            //db_conn = createConnection();
+            //beginTransaction();
+
+            try (Statement _statement = db_conn.createStatement()) {
+                result = _statement.execute(query);
+            }
+
+            //commitTransaction();
+            //close();
+            // closing _Conn Connetion
+        } catch (Exception e) {
+            //rollbackTransaction();
+            //close();
+            throw e;
+        }
+
+        return result;
+    }
+
+    @Override
+    public boolean executeProcedure(String procedure,
+            DbParameter... parameters) throws Exception {
+        boolean result;
+
+        try {
+            //db_conn = createConnection();
+            //beginTransaction();
+
+            try (CallableStatement callable = db_conn.prepareCall(procedure)) {
+
+                if (parameters != null) {
+                    int param_dir_id;
+                    for (DbParameter param : parameters) {
+                        param_dir_id = param.getParameterDirection();
+                        if (param_dir_id == DbParameter.PARAMETER_DIRECTION_IN) {
+                            callable.setObject(param.getIndex(), param.getValue());
+                        }
+                    }
+                }
+
+                result = callable.execute();
+                callable.clearParameters();
+            }
+
+            //commitTransaction();
+            //close();
+        } catch (Exception e) {
+            //rollbackTransaction();
+            //close();
+            throw e;
+        }
+
+        return result;
+    }
+
+    @Override
+    public boolean executeProcedure(String procedure) throws Exception {
+        boolean result;
+
+        try {
+
+            //db_conn = createConnection();
+            //beginTransaction();
+            try (CallableStatement callable = db_conn.prepareCall(procedure)) {
+                result = callable.execute();
+            }
+
+            //commitTransaction();
+            //close();
+        } catch (Exception e) {
+            //rollbackTransaction();
+            //close();
+            throw e;
+        }
+
+        return result;
+    }
+
+    @Override
+    public Integer executeUpdateQuery(String query, DbParameter... parameters) throws Exception {
+        int result = -1;
+
+        try {
+            //db_conn = createConnection();
+            //beginTransaction();
+
+            if (db_conn != null) {
+                try (PreparedStatement prepared = db_conn.prepareStatement(query)) {
+
+                    if (parameters != null) {
+                        int param_dir_id;
+                        for (DbParameter param : parameters) {
+                            param_dir_id = param.getParameterDirection();
+                            if (param_dir_id == DbParameter.PARAMETER_DIRECTION_IN) {
+                                prepared.setObject(param.getIndex(), param.getValue());
+                            }
+                        }
+                    }
+                    result = prepared.executeUpdate();
+                    prepared.clearParameters();
+                    prepared.clearWarnings();
+                }
+            }
+            //commitTransaction();
+            //close();
+        } catch (Exception e) {
+            //rollbackTransaction();
+            //close();
+            throw e;
+        }
+
+        return result;
+    }
+
+    @Override
+    public Integer executeUpdateQuery(String query) throws Exception {
+        int result;
+
+        try {
+            //db_conn = createConnection();
+
+            //beginTransaction();
+            try (Statement _statement = db_conn.createStatement()) {
+                result = _statement.executeUpdate(query);
+            }
+
+            //commitTransaction();
+            //close();
+        } catch (Exception e) {
+            //rollbackTransaction();
+            //close();
+            throw e;
+        }
+
+        return result;
+    }
+
+    @Override
+    public Integer executeUpdateProcedure(String procedure, DbParameter... parameters) throws Exception {
+        int result;
+
+        try {
+            //db_conn = createConnection();
+            //beginTransaction();
+
+            try (CallableStatement callable = db_conn.prepareCall(procedure)) {
+                if (parameters != null) {
+                    int param_dir_id;
+                    for (DbParameter param : parameters) {
+                        param_dir_id = param.getParameterDirection();
+                        if (param_dir_id == DbParameter.PARAMETER_DIRECTION_IN) {
+                            callable.setObject(param.getIndex(), param.getValue());
+                        }
+                    }
+                }
+
+                result = callable.executeUpdate();
+            }
+
+            //commitTransaction();
+            //close();
+        } catch (Exception e) {
+            //rollbackTransaction();
+            //close();
+            throw e;
+        }
+
+        return result;
+    }
+
+    @Override
+    public Integer executeUpdateProcedure(String procedure) throws Exception {
+        int result;
+
+        try {
+            //db_conn = createConnection();
+            //beginTransaction();
+
+            try (CallableStatement callable = db_conn.prepareCall(procedure)) {
+                result = callable.executeUpdate();
+            }
+            //commitTransaction();
+            //close();
+
+        } catch (Exception e) {
+            //rollbackTransaction();
+            //close();
+            throw e;
+        }
+
+        return result;
+    }
+
+    @Override
+    public Object[] executeScalarQuery(String query, DbParameter... parameters) throws Exception {
+        Object[] result = new Object[]{};
+
+        try {
+            List<Object> retObjList = new ArrayList<Object>();
+            //db_conn = createConnection();
+            //beginTransaction();
+
+            try (CallableStatement callable = db_conn.prepareCall(query)) {
+
+                if (parameters != null) {
+                    int param_dir_id;
+                    for (DbParameter param : parameters) {
+                        param_dir_id = param.getParameterDirection();
+                        if (param_dir_id == DbParameter.PARAMETER_DIRECTION_OUT) {
+                            callable.registerOutParameter(param.getIndex(),
+                                    java.sql.Types.JAVA_OBJECT);
+                        } else if (param_dir_id == DbParameter.PARAMETER_DIRECTION_IN) {
+                            callable.setObject(param.getIndex(), param.getValue());
+                        } else {
+                        }
+                    }
+
+                    callable.executeUpdate();
+
+                    for (DbParameter param : parameters) {
+                        param_dir_id = param.getParameterDirection();
+                        if (param_dir_id == DbParameter.PARAMETER_DIRECTION_OUT) {
+                            retObjList.add(callable.getObject(param.getIndex()));
+                        }
+                    }
+
+                } else {
+
+                    try (ResultSet rs = callable.executeQuery()) {
+                        while (rs.next()) {
+                            int colInt = rs.getMetaData().getColumnCount();
+                            for (int i = 0; i < colInt; i++) {
+                                retObjList.add(rs.getObject(i + 1));
+                            }
+                            rs.close();
+                            break;
+                        }
+                    }
+                }
+            }
+
+            //commitTransaction();
+            //close();
+            result = retObjList.toArray();
+
+        } catch (Exception e) {
+            //rollbackTransaction();
+            //close();
+            throw e;
+        }
+
+        return result;
+    }
+
+    @Override
+    public Object[] executeScalarQuery(String query) throws Exception {
+        Object[] result = new Object[]{};
+
+        try {
+            List<Object> objList = new ArrayList<Object>();
+            //db_conn = createConnection();
+            //beginTransaction();
+
+            try (Statement _statement = db_conn.createStatement()) {
+
+                try (ResultSet rS = _statement.executeQuery(query)) {
+                    int cols = rS.getMetaData().getColumnCount();
+                    while (rS.next()) {
+                        for (int i = 0; i < cols; i++) {
+                            objList.add(rS.getObject(i + 1));
+                        }
+                        break;
+                    }
+                }
+            }
+
+            //commitTransaction();
+            //close();
+            result = objList.toArray();
+
+        } catch (Exception ex) {
+            //rollbackTransaction();
+            //close();
+            throw ex;
+        }
+
+        return result;
+    }
+
+    @Override
+    public Object[] executeScalarProcedure(String procedure, DbParameter... parameters) throws Exception {
+        Object[] result = new Object[]{};
+
+        try {
+            List<Object> obj_list = new ArrayList<Object>();
+            //db_conn = createConnection();
+            //beginTransaction();
+
+            try (CallableStatement callable = db_conn.prepareCall(procedure)) {
+
+                if (parameters != null) {
+
+                    int param_dir_id;
+                    for (DbParameter p : parameters) {
+                        param_dir_id = p.getParameterDirection();
+                        if (param_dir_id == DbParameter.PARAMETER_DIRECTION_IN) {
+                            callable.setObject(p.getIndex(), p.getValue());
+                        } else if (param_dir_id == DbParameter.PARAMETER_DIRECTION_OUT) {
+                            callable.registerOutParameter(p.getIndex(),
+                                    java.sql.Types.JAVA_OBJECT);
+                        } else {
+                        }
+                    }
+
+                    callable.executeUpdate();
+
+                    for (DbParameter p : parameters) {
+                        param_dir_id = p.getParameterDirection();
+                        if (param_dir_id == DbParameter.PARAMETER_DIRECTION_OUT) {
+                            obj_list.add(callable.getObject(p.getIndex()));
+                        }
+                    }
+
+                } else {
+                    try (ResultSet rS = callable.executeQuery()) {
+                        int cols = rS.getMetaData().getColumnCount();
+                        while (rS.next()) {
+                            for (int col_counter = 0; col_counter < cols; col_counter++) {
+                                obj_list.add(rS.getObject(col_counter + 1));
+                            }
+                            rS.close();
+                            break;
+                        }
+                    }
+                }
+            }
+
+            //commitTransaction();
+            //close();
+            result = obj_list.toArray();
+
+        } catch (Exception ex) {
+            //rollbackTransaction();
+            //close();
+            throw ex;
+        }
+
+        return result;
+    }
+
+    @Override
+    public Object[] executeScalarProcedure(String procedure) throws Exception {
+        Object[] result = new Object[]{};
+
+        try {
+            result = executeScalarQuery(procedure, new DbParameter[]{});
+        } catch (Exception e) {
+            throw e;
+        }
+
+        return result;
+    }
+
+    @Override
+    public ResultSet getResultSetOfQuery(String query, DbParameter... parameters) throws Exception {
+        ResultSet rs = null;
+
+        try {
+            //db_conn = createConnection();
+            //beginTransaction();
+
+            try (PreparedStatement prepared = db_conn.prepareStatement(query)) {
+
+                if (parameters != null) {
+                    int param_dir_id;
+                    for (DbParameter p : parameters) {
+                        param_dir_id = p.getParameterDirection();
+                        if (param_dir_id == DbParameter.PARAMETER_DIRECTION_IN) {
+                            prepared.setObject(p.getIndex(), p.getValue());
+                        }
+                    }
+                }
+
+                rs = prepared.executeQuery();
+            }
+            //commitTransaction();
+            //close();
+
+        } catch (Exception e) {
+            //rollbackTransaction();
+            //close();
+            throw e;
+        }
+
+        return rs;
+    }
+
+    @Override
+    public ResultSet getResultSetOfQuery(String query) throws Exception {
+        ResultSet rs = null;
+
+        try {
+            //db_conn = createConnection();
+            //beginTransaction();
+
+            try (Statement _statement = db_conn.createStatement()) {
+                rs = _statement.executeQuery(query);
+            }
+
+            //commitTransaction();
+            //close();
+        } catch (Exception e) {
+            //rollbackTransaction();
+            //close();
+            throw e;
+        }
+
+        return rs;
+    }
+
+    @Override
+    public ResultSet getResultSetOfProcedure(String query, DbParameter... parameters) throws Exception {
+        ResultSet rS = null;
+
+        try {
+            //db_conn = createConnection();
+            //beginTransaction();
+
+            try (CallableStatement callable = db_conn.prepareCall(query)) {
+                if (parameters != null) {
+                    int param_dir_id;
+                    for (DbParameter p : parameters) {
+                        param_dir_id = p.getParameterDirection();
+                        if (param_dir_id == DbParameter.PARAMETER_DIRECTION_IN) {
+                            callable.setObject(p.getIndex(), p.getValue());
+                        }
+                    }
+                }
+                rS = callable.executeQuery();
+            }
+
+            //commitTransaction();
+            //close();
+        } catch (Exception e) {
+            //rollbackTransaction();
+            //close();
+            throw e;
+        }
+
+        return rS;
+    }
+
+    @Override
+    public ResultSet getResultSetOfProcedure(String procedure) throws Exception {
+        ResultSet rs = null;
+
+        try {
+            rs = this.getResultSetOfProcedure(procedure, new DbParameter[]{});
+        } catch (Exception e) {
+            throw e;
+        }
+
+        return rs;
+    }
+
+    @Override
+    public void close() throws Exception {
+        try {
+            closeConnection();
+            Runtime.getRuntime().gc();
+        } catch (Exception e) {
+            throw e;
+        }
+    }
+
+    @Override
+    public List<String> getCatalogs() throws Exception {
+        List<String> databases = new ArrayList<String>();
+
+        try {
+            try (ResultSet rS = db_conn.getMetaData().getCatalogs()) {
+
+                while (rS.next()) {
+                    databases.add(rS.getString(1));
+                }
+            }
+        } catch (Exception e) {
+            throw e;
+        }
+
+        return databases;
+    }
+
+    @Override
+    public List<String> getTables() throws Exception {
+        List<String> tables = new ArrayList<String>();
+
+        try {
+            DatabaseMetaData dbmd = db_conn.getMetaData();
+
+            // Specify the type of object; in this case we want tables
+            String[] types = {"TABLE"};
+
+            try (ResultSet resultSet = dbmd.getTables(null, null, "%", types)) {
+
+                while (resultSet.next()) {
+                    // Get the table name
+                    tables.add(resultSet.getString(3));
+
+                    /*
+                     // Get the table's catalog and schema names (if any)
+                     String tableCatalog = resultSet.getString(1);
+                     String tableSchema = resultSet.getString(2);
+                     */
+                }
+            }
+        } catch (Exception e) {
+            throw e;
+        }
+
+        return tables;
+    }
+
+    @Override
+    public int[] executeBatchQuery(String query, DbParameter[][] parameters) throws Exception {
+        int[] retIntArray = null;
+
+        try {
+            if (parameters == null || parameters.length == 0) {
+                throw new Exception("Parameters list can not be null or empty.");
+            }
+
+            try (PreparedStatement prep = db_conn.prepareStatement(query)) {
+                int param_dir_id;
+                /*
+                int param_counter;
+                for (DbParameter[] prms : parameters) {
+                    param_counter = 0;
+                    for (DbParameter p : prms) {
+                        if(p != null){
+                        param_counter += 1;
+                        
+                    }
+                    }
+                }
+                */
+                for (int i = 0; i < parameters.length; i++) {
+                    for (int j = 0; j < parameters[i].length; j++) {
+                        DbParameter p = parameters[i][j];
+                        if (p != null) {
+                            param_dir_id = p.getParameterDirection();
+                            if (param_dir_id == DbParameter.PARAMETER_DIRECTION_IN) {
+                                prep.setObject(p.getIndex(), p.getValue());
+                            }
+                        }
+                    }
+
+                    prep.addBatch();
+                }
+
+                retIntArray = prep.executeBatch();
+            }
+        } catch (Exception t) {
+            throw t;
+        }
+
+        return retIntArray;
+    }
+
+    @Override
+    public void beginTransaction() throws SQLException {
+        try {
+
+            if (db_conn != null) {
+                if (!db_conn.isClosed()) {
+                    db_conn.setAutoCommit(false);
+                }
+            }
+
+        } catch (Exception e) {
+            throw e;
+        }
+    }
+
+    @Override
+    public void commitTransaction() throws SQLException {
+        try {
+            if (db_conn != null) {
+                if (!db_conn.isClosed()) {
+                    db_conn.commit();
+                }
+            }
+        } catch (Exception e) {
+            throw e;
+        }
+    }
+
+    @Override
+    public void closeTransaction() throws SQLException {
+        try {
+
+            if (db_conn != null) {
+                if (!db_conn.isClosed()) {
+                    db_conn.setAutoCommit(true);
+                }
+            }
+
+        } catch (Exception e) {
+            throw e;
+        }
+    }
+
+    @Override
+    public void rollbackTransaction() throws SQLException {
+        try {
+
+            if (db_conn != null) {
+                if (!db_conn.isClosed()) {
+                    db_conn.rollback();
+                }
+            }
+
+        } catch (Exception e) {
+            throw e;
+        }
+    }
+
+    @Override
+    public int closeConnection() {
+        int result = -1;
+
+        try {
+            if (db_conn != null) {
+                result = 0;
+                if (!db_conn.isClosed()) {
+                    result = 1;
+                    db_conn.close();
+                }
+            }
+        } catch (Exception e) {
+            last_closing_error = e;
+        } finally {
+            db_conn = null;
+        }
+
+        return result;
+    }
+
+    @Override
+    public void open() throws Exception {
+        try {
+            try {
+                last_closing_error = null;
+            } catch (Exception e) {
+            }
+
+            if (db_conn == null) {
+                initConnection();
+                return;
+            }
+
+            if (db_conn.isClosed()) {
+                initConnection();
+            }
+
+        } catch (Exception e) {
+            throw e;
+        }
+    }
+
+    /**
+     * @return the last_closing_error
+     */
+    public Exception getLastClosingError() {
+        return last_closing_error;
+    }
+}
